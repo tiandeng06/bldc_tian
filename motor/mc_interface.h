@@ -101,6 +101,8 @@ void mc_interface_override_wheel_speed(bool ovr, float speed);
 setup_values mc_interface_get_setup_values(void);
 volatile gnss_data *mc_interface_gnss(void);
 
+float modify_duty(float dutyCycle); // SeaDrive modify duty function
+
 // odometer
 uint64_t mc_interface_get_odometer(void);
 void mc_interface_set_odometer(uint64_t new_odometer_meters);

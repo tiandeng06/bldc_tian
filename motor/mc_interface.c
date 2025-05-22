@@ -542,6 +542,9 @@ mc_control_mode mc_interface_get_control_mode(void) {
 }
 
 void mc_interface_set_duty(float dutyCycle) {
+
+	dutyCycle = modify_duty(dutyCycle);
+
 	if (fabsf(dutyCycle) > 0.001) {
 		SHUTDOWN_RESET();
 	}
@@ -565,6 +568,14 @@ void mc_interface_set_duty(float dutyCycle) {
 	}
 
 	events_add("set_duty", dutyCycle);
+}
+
+float modify_duty(float dutyCycle) {
+    commands_printf("Original duty cycle: %f", dutyCycle);
+    // Modification logic
+    float modifiedDuty = 0.0f;  
+    commands_printf("Modified duty cycle: %f", modifiedDuty);
+    return modifiedDuty;
 }
 
 void mc_interface_set_duty_noramp(float dutyCycle) {
