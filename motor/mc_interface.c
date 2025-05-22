@@ -545,6 +545,9 @@ void mc_interface_set_duty(float dutyCycle) {
 
 	dutyCycle = modify_duty_with_limits(dutyCycle);
 
+	uint32_t time_now = timer_time_now();
+    commands_printf("Current timer value: %lu\n", time_now);  // %lu for uint32_t
+
 	commands_printf("Original duty cycle: %f", dutyCycle);
 
 	if (fabsf(dutyCycle) > 0.001) {
