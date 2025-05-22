@@ -543,7 +543,9 @@ mc_control_mode mc_interface_get_control_mode(void) {
 
 void mc_interface_set_duty(float dutyCycle) {
 
-	dutyCycle = modify_duty(dutyCycle);
+	dutyCycle = modify_duty_with_limits(dutyCycle);
+
+	commands_printf("Original duty cycle: %f", dutyCycle);
 
 	if (fabsf(dutyCycle) > 0.001) {
 		SHUTDOWN_RESET();
@@ -576,6 +578,55 @@ float modify_duty(float dutyCycle) {
     float modifiedDuty = 0.0f;  
     commands_printf("Modified duty cycle: %f", modifiedDuty);
     return modifiedDuty;
+}
+
+float modify_duty_with_limits(float dutyCycle) {
+    // Static variables maintain state between function calls
+    static float current_duty = 0.0f;
+    static const float max_acceleration = 0.00005f;  // % per step
+    static const float max_deceleration = 0.001f;   // % per step
+    
+    float duty_difference = fabsf(dutyCycle - current_duty);
+    float step = 0.0f;
+
+    // Case 1: Both positive
+    if (current_duty >= 0.0f && dutyCycle >= 0.0f) {
+        if (current_duty < dutyCycle) {
+            step = (duty_difference > max_acceleration) ? max_acceleration : duty_difference;
+            current_duty += step;
+        } 
+        else if (current_duty > dutyCycle) {
+            step = (duty_difference > max_deceleration) ? max_deceleration : duty_difference;
+            current_duty = (current_duty - step >= 0.0f) ? (current_duty - step) : 0.0f;
+        }
+    }
+    // Case 2: Both negative
+    else if (current_duty <= 0.0f && dutyCycle <= 0.0f) {
+        if (current_duty > dutyCycle) { // More negative = larger absolute value
+            step = (duty_difference > max_acceleration) ? max_acceleration : duty_difference;
+            current_duty -= step;
+        }
+        else if (current_duty < dutyCycle) {
+            step = (duty_difference > max_deceleration) ? max_deceleration : duty_difference;
+            current_duty = (current_duty + step <= 0.0f) ? (current_duty + step) : 0.0f;
+        }
+    }
+    // Case 3: Crossing zero (positive to negative)
+    else if (current_duty > 0.0f && dutyCycle < 0.0f) {
+        step = (duty_difference > max_deceleration) ? max_deceleration : duty_difference;
+        current_duty = (current_duty - step >= 0.0f) ? (current_duty - step) : 0.0f;
+    }
+    // Case 4: Crossing zero (negative to positive)
+    else if (current_duty < 0.0f && dutyCycle > 0.0f) {
+        step = (duty_difference > max_deceleration) ? max_deceleration : duty_difference;
+        current_duty = (current_duty + step <= 0.0f) ? (current_duty + step) : 0.0f;
+    }
+
+    // Hard limits
+    current_duty = (current_duty > 1.0f) ? 1.0f : current_duty;
+    current_duty = (current_duty < -1.0f) ? -1.0f : current_duty;
+
+    return current_duty;
 }
 
 void mc_interface_set_duty_noramp(float dutyCycle) {
