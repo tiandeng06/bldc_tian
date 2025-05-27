@@ -543,12 +543,14 @@ mc_control_mode mc_interface_get_control_mode(void) {
 
 void mc_interface_set_duty(float dutyCycle) {
 
+	//static float test_duty = dutyCycle;
+	//commands_printf("Original duty cycle: %f", dutyCycle);
 	dutyCycle = modify_duty_with_limits(dutyCycle);
 
-	uint32_t time_now = timer_time_now();
+	/*uint32_t time_now = timer_time_now();
     commands_printf("Current timer value: %lu\n", time_now);  // %lu for uint32_t
-
-	commands_printf("Original duty cycle: %f", dutyCycle);
+	*/
+	commands_printf("Modified duty cycle: %f", dutyCycle);
 
 	if (fabsf(dutyCycle) > 0.001) {
 		SHUTDOWN_RESET();
@@ -575,14 +577,95 @@ void mc_interface_set_duty(float dutyCycle) {
 	events_add("set_duty", dutyCycle);
 }
 
-float modify_duty(float dutyCycle) {
-    commands_printf("Original duty cycle: %f", dutyCycle);
-    // Modification logic
-    float modifiedDuty = 0.0f;  
-    commands_printf("Modified duty cycle: %f", modifiedDuty);
-    return modifiedDuty;
+float modify_duty_with_limits(float dutyCycle) {
+    static float current_duty = 0.0f;
+    const float max_acceleration = 0.0005f; // 1.0 / 2 sec with 100,000 ticks per sec simplified to per call
+
+    float delta = dutyCycle - current_duty;
+
+    if ((current_duty >= 0.0f && dutyCycle >= 0.0f) ||
+        (current_duty <= 0.0f && dutyCycle <= 0.0f)) {
+
+        if (fabsf(dutyCycle) > fabsf(current_duty)) {
+            // Accelerate gradually with fixed step
+            float step = (fabsf(delta) > max_acceleration) ? max_acceleration : fabsf(delta);
+            current_duty += copysignf(step, delta);
+        } else {
+            // Deceleration removed - jump immediately
+            current_duty = dutyCycle;
+        }
+
+    } else {
+        // Crossing zero - smooth ramp to zero using fixed step
+        if (fabsf(current_duty) > max_acceleration) {
+            current_duty -= copysignf(max_acceleration, current_duty);
+        } else {
+            current_duty = 0.0f;
+        }
+    }
+
+    // Clamp to [-1, 1]
+    //if (current_duty > 1.0f) current_duty = 1.0f;
+    //if (current_duty < -1.0f) current_duty = -1.0f;
+
+	// Clamp to [-0.4, 0.4] for safety
+	if (current_duty > 0.4f) current_duty = 0.4f;
+	if (current_duty < -0.4f) current_duty = -0.4f;
+
+    return current_duty;
 }
 
+
+/*
+float modify_duty_with_limits(float dutyCycle) {
+    static float current_duty = 0.0f;
+    static uint32_t last_time = 0;
+
+    uint32_t time_now = timer_time_now();
+    if (last_time == 0) {
+        last_time = time_now;  // Initialize on first call
+    }
+
+    uint32_t elapsed = time_now - last_time;
+    last_time = time_now;
+
+    // 100,000 ticks = 1 second → 200,000 ticks = 2 sec → 1.0 / 200000 = 0.000005
+    const float accel_rate = 0.000005f;  // units per tick
+    float max_step = accel_rate * elapsed;
+
+    float delta = dutyCycle - current_duty;
+
+    // Same sign (both positive or both negative)
+    if ((current_duty >= 0.0f && dutyCycle >= 0.0f) ||
+        (current_duty <= 0.0f && dutyCycle <= 0.0f)) {
+
+        if (fabsf(dutyCycle) > fabsf(current_duty)) {
+            // Accelerating
+            float step = fminf(fabsf(delta), max_step);
+            current_duty += copysignf(step, delta);
+        } else {
+            // Deceleration is skipped
+            current_duty = dutyCycle;
+        }
+
+    } else {
+        // Crossing zero — smoothly approach 0
+        if (fabsf(current_duty) > max_step) {
+            current_duty -= copysignf(max_step, current_duty);
+        } else {
+            current_duty = 0.0f;
+        }
+    }
+
+    // Clamp to [-1.0, 1.0]
+    if (current_duty > 1.0f) current_duty = 1.0f;
+    if (current_duty < -1.0f) current_duty = -1.0f;
+
+    return current_duty;
+}*/
+
+
+/*
 float modify_duty_with_limits(float dutyCycle) {
     // Static variables maintain state between function calls
     static float current_duty = 0.0f;
@@ -631,6 +714,7 @@ float modify_duty_with_limits(float dutyCycle) {
 
     return current_duty;
 }
+*/
 
 void mc_interface_set_duty_noramp(float dutyCycle) {
 	if (fabsf(dutyCycle) > 0.001) {
