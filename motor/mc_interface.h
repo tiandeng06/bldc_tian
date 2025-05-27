@@ -103,6 +103,7 @@ volatile gnss_data *mc_interface_gnss(void);
 
 float modify_duty(float dutyCycle); // SeaDrive modify duty function
 float modify_duty_with_limits(float dutyCycle); // SeaDrive modify duty function with limits
+float modify_duty_with_limits_with_timer(float dutyCycle);
 
 // odometer
 uint64_t mc_interface_get_odometer(void);
