@@ -544,13 +544,13 @@ mc_control_mode mc_interface_get_control_mode(void) {
 void mc_interface_set_duty(float dutyCycle) {
 
 	dutyCycle = modify_duty_with_limits(dutyCycle);
-	//dutyCycle = modify_duty_with_limits_with_timer(dutyCycle);
+	//dutyCycle = modify_duty_with_fixed_time(dutyCycle);
 	
 	/*
 	uint32_t time_now = timer_time_now();
     commands_printf("Current timer value: %lu\n", time_now);  // %lu for uint32_t
 	*/
-	commands_printf("Modified duty cycle: %f", dutyCycle);
+	//commands_printf("Modified duty cycle: %f", dutyCycle);
 
 	if (fabsf(dutyCycle) > 0.001) {
 		SHUTDOWN_RESET();
@@ -605,167 +605,60 @@ float modify_duty_with_limits(float dutyCycle) {
     }
 
     // Clamp to [-1, 1]
-    //if (current_duty > 1.0f) current_duty = 1.0f;
-    //if (current_duty < -1.0f) current_duty = -1.0f;
-
-	// Clamp to [-0.4, 0.4] for safety
-	if (current_duty > 0.4f) current_duty = 0.4f;
-	if (current_duty < -0.4f) current_duty = -0.4f;
-
-    return current_duty;
-}
-
-float modify_duty_with_limits_with_timer(float dutyCycle) {
-    static float current_duty = 0.0f;
-    static uint32_t last_time = 0;
-
-    uint32_t time_now = timer_time_now();
-    if (last_time == 0) {
-        last_time = time_now;  // Initialize on first call
-    }
-
-    uint32_t elapsed = time_now - last_time;
-    last_time = time_now;
-
-    // 100,000 ticks = 1 second → 500,000 ticks = 5 sec → 1.0 / 500000 = 0.000002
-    const float accel_rate = 0.000002f;  // New rate for 5 second ramp
-    float max_step = accel_rate * elapsed;
-
-    float delta = dutyCycle - current_duty;
-
-    // Same sign (both positive or both negative)
-    if ((current_duty >= 0.0f && dutyCycle >= 0.0f) ||
-        (current_duty <= 0.0f && dutyCycle <= 0.0f)) {
-
-        if (fabsf(dutyCycle) > fabsf(current_duty)) {
-            // Accelerating
-            float step = fminf(fabsf(delta), max_step);
-            current_duty += copysignf(step, delta);
-        } else {
-            // Deceleration is skipped
-            current_duty = dutyCycle;
-        }
-
-    } else {
-        // Crossing zero — smoothly approach 0
-        if (fabsf(current_duty) > max_step) {
-            current_duty -= copysignf(max_step, current_duty);
-        } else {
-            current_duty = 0.0f;
-        }
-    }
-
-    // Clamp to [-1.0, 1.0]
-    //if (current_duty > 1.0f) current_duty = 1.0f;
-    //if (current_duty < -1.0f) current_duty = -1.0f;
-
-	// Clamp to [-0.4, 0.4] for safety
-	if (current_duty > 0.4f) current_duty = 0.4f;
-	if (current_duty < -0.4f) current_duty = -0.4f;
-
-    return current_duty;
-}
-
-
-/*
-float modify_duty_with_limits(float dutyCycle) {
-    static float current_duty = 0.0f;
-    static uint32_t last_time = 0;
-
-    uint32_t time_now = timer_time_now();
-    if (last_time == 0) {
-        last_time = time_now;  // Initialize on first call
-    }
-
-    uint32_t elapsed = time_now - last_time;
-    last_time = time_now;
-
-    // 100,000 ticks = 1 second → 200,000 ticks = 2 sec → 1.0 / 200000 = 0.000005
-    const float accel_rate = 0.000005f;  // units per tick
-    float max_step = accel_rate * elapsed;
-
-    float delta = dutyCycle - current_duty;
-
-    // Same sign (both positive or both negative)
-    if ((current_duty >= 0.0f && dutyCycle >= 0.0f) ||
-        (current_duty <= 0.0f && dutyCycle <= 0.0f)) {
-
-        if (fabsf(dutyCycle) > fabsf(current_duty)) {
-            // Accelerating
-            float step = fminf(fabsf(delta), max_step);
-            current_duty += copysignf(step, delta);
-        } else {
-            // Deceleration is skipped
-            current_duty = dutyCycle;
-        }
-
-    } else {
-        // Crossing zero — smoothly approach 0
-        if (fabsf(current_duty) > max_step) {
-            current_duty -= copysignf(max_step, current_duty);
-        } else {
-            current_duty = 0.0f;
-        }
-    }
-
-    // Clamp to [-1.0, 1.0]
     if (current_duty > 1.0f) current_duty = 1.0f;
     if (current_duty < -1.0f) current_duty = -1.0f;
 
     return current_duty;
-}*/
+}
 
-
-/*
-float modify_duty_with_limits(float dutyCycle) {
-    // Static variables maintain state between function calls
+float modify_duty_with_fixed_time(float dutyCycle) {
     static float current_duty = 0.0f;
-    static const float max_acceleration = 0.00005f;  // % per step
-    static const float max_deceleration = 0.001f;   // % per step
-    
-    float duty_difference = fabsf(dutyCycle - current_duty);
-    float step = 0.0f;
+    static uint32_t last_update_time = 0;
+    static uint32_t last_nonzero_input_time = 0;
 
-    // Case 1: Both positive
-    if (current_duty >= 0.0f && dutyCycle >= 0.0f) {
-        if (current_duty < dutyCycle) {
-            step = (duty_difference > max_acceleration) ? max_acceleration : duty_difference;
-            current_duty += step;
-        } 
-        else if (current_duty > dutyCycle) {
-            step = (duty_difference > max_deceleration) ? max_deceleration : duty_difference;
-            current_duty = (current_duty - step >= 0.0f) ? (current_duty - step) : 0.0f;
-        }
-    }
-    // Case 2: Both negative
-    else if (current_duty <= 0.0f && dutyCycle <= 0.0f) {
-        if (current_duty > dutyCycle) { // More negative = larger absolute value
-            step = (duty_difference > max_acceleration) ? max_acceleration : duty_difference;
-            current_duty -= step;
-        }
-        else if (current_duty < dutyCycle) {
-            step = (duty_difference > max_deceleration) ? max_deceleration : duty_difference;
-            current_duty = (current_duty + step <= 0.0f) ? (current_duty + step) : 0.0f;
-        }
-    }
-    // Case 3: Crossing zero (positive to negative)
-    else if (current_duty > 0.0f && dutyCycle < 0.0f) {
-        step = (duty_difference > max_deceleration) ? max_deceleration : duty_difference;
-        current_duty = (current_duty - step >= 0.0f) ? (current_duty - step) : 0.0f;
-    }
-    // Case 4: Crossing zero (negative to positive)
-    else if (current_duty < 0.0f && dutyCycle > 0.0f) {
-        step = (duty_difference > max_deceleration) ? max_deceleration : duty_difference;
-        current_duty = (current_duty + step <= 0.0f) ? (current_duty + step) : 0.0f;
+    const uint32_t update_interval = 100;      // 100ms step interval
+    const uint32_t idle_reset_time = 600;      // Reset after 600ms idle
+
+    uint32_t time_now = ST2MS(chVTGetSystemTimeX());
+
+    // Initialize timestamps on first run
+    if (last_update_time == 0) {
+        last_update_time = time_now;
+        last_nonzero_input_time = time_now;
+        return current_duty;
     }
 
-    // Hard limits
-    current_duty = (current_duty > 1.0f) ? 1.0f : current_duty;
-    current_duty = (current_duty < -1.0f) ? -1.0f : current_duty;
+    // Track last time joystick input was nonzero
+    if (fabsf(dutyCycle) > 0.01f) {
+        last_nonzero_input_time = time_now;
+    }
+
+    // If input has been zero for a long time, assume motor reset and sync internal state
+    if ((fabsf(dutyCycle) < 0.01f) &&
+        (time_now - last_nonzero_input_time >= idle_reset_time)) {
+        current_duty = 0.0f;
+    }
+
+    uint32_t elapsed = time_now - last_update_time;
+
+    if (elapsed >= update_interval) {
+        last_update_time = time_now;
+
+        const float step_size = 0.02f; // For 5s full ramp
+        float delta = dutyCycle - current_duty;
+        float step = fminf(fabsf(delta), step_size);
+        current_duty += copysignf(step, delta);
+
+        // Clamp duty to safe range
+        current_duty = fmaxf(fminf(current_duty, 0.4f), -0.4f);
+		commands_printf("Modified duty & delta cycle: %f, %f ", dutyCycle, delta);
+    }
+	
 
     return current_duty;
 }
-*/
+
+
 
 void mc_interface_set_duty_noramp(float dutyCycle) {
 	if (fabsf(dutyCycle) > 0.001) {
